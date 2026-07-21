@@ -1,10 +1,12 @@
 import os
 import logging
 import json
+import requests
 import azure.functions as func
 from azure.data.tables import TableServiceClient
 from azure.communication.email import EmailClient
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ResourceExistsError
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -42,22 +44,33 @@ def http_post(req: func.HttpRequest) -> func.HttpResponse:
         table_service = TableServiceClient.from_connection_string(conn_str=storage_key)
         table_client = table_service.get_table_client("MasterTable")
 
-        data = req.get_json()
+        data1 = req.get_json()
 
-        rk=data["DEP"].upper()+data["ARR"].upper()+data["DATE"]
+        
+        dep=data1["DEP"]
+        arr=data1["ARR"]
+        date3=data1["DATE"]
+        
+        api_key= os.environ.get["Serp_API2"]
+        response = requests.get("https://serpapi.com/search.json?engine=google_flights&departure_id="+dep+"&arrival_id="+arr+"&gl=in&hl=en&currency=INR&type=2&outbound_date="+date3+"&show_hidden=true&adults=1&stops=1&api_key="+api_key)
+        data2=response.json()
+        best_flights = data2.get("best_flights", [])
+        other_flights = data2.get("other_flights", [])
+
+        freq=len(best_flights)+len(other_flights)
+        rk=data1["DEP"].upper()+data1["ARR"].upper()+data1["DATE"]
+
         new_entity={"PartitionKey":"Route",
                     "RowKey":rk,
-                    "DEP":data["DEP"],
-                    "ARR":data["ARR"],
-                    "FREQ":data["FREQ"],
-                    "DATE":data["DATE"]}
+                    "DEP":data1["DEP"].upper(),
+                    "ARR":data1["ARR"].upper(),
+                    "FREQ":freq,
+                    "DATE":data1["DATE"]}
         
-        table_client.create_entity(new_entity)
-
-        dep=data["DEP"]
-        arr=data["ARR"]
-        freq=data["FREQ"]
-        date=data["DATE"]
+        try:
+            table_client.create_entity(new_entity)
+        except ResourceExistsError:
+            return func.HttpResponse("This route and date is already being tracked", status_code=409)
 
         message = {
             "senderAddress": "DoNotReply@b69c3249-d05b-47d9-a9a3-9fc4b60755d6.azurecomm.net",
@@ -66,7 +79,7 @@ def http_post(req: func.HttpRequest) -> func.HttpResponse:
             },
             "content": {
                 "subject": f'New Prompt Added',
-                "plainText": f'A new prompt has been added on the app, for:\n\nRoute: {dep}-{arr}\nFrequency (as on date of addition): {freq}\nDate: {date}',
+                "plainText": f'A new prompt has been added on the app, for:\n\nRoute: {dep}-{arr}\nFrequency (as on date of addition): {freq}\nDate: {date3}',
             },
             
         }
