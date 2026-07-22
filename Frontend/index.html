@@ -773,36 +773,7 @@
       <div></div>
       <div></div>
     </div>
-
-    <!-- Rows below are placeholder data. Replace with rows rendered
-         from the GET /api/pairs response once the API is wired in. -->
-    <div class="row" style="animation-delay:0.05s" data-pk="Route" data-rk="DEL-BOM-2026-08-15">
-      <div class="dep">DEL</div>
-      <div class="arr">BOM</div>
-      <div class="date">2026-08-15</div>
-      <div class="freq">14x</div>
-      <div class="route-arrow">→</div>
-      <div class="row-actions"><button class="delete-btn" aria-label="Remove DEL to BOM on 2026-08-15">×</button></div>
     </div>
-
-    <div class="row" style="animation-delay:0.12s" data-pk="Route" data-rk="BLR-DEL-2026-09-02">
-      <div class="dep">BLR</div>
-      <div class="arr">DEL</div>
-      <div class="date">2026-09-02</div>
-      <div class="freq">9x</div>
-      <div class="route-arrow">→</div>
-      <div class="row-actions"><button class="delete-btn" aria-label="Remove BLR to DEL on 2026-09-02">×</button></div>
-    </div>
-
-    <div class="row" style="animation-delay:0.19s" data-pk="Route" data-rk="HYD-BOM-2026-08-28">
-      <div class="dep">HYD</div>
-      <div class="arr">BOM</div>
-      <div class="date">2026-08-28</div>
-      <div class="freq">6x</div>
-      <div class="route-arrow">→</div>
-      <div class="row-actions"><button class="delete-btn" aria-label="Remove HYD to BOM on 2026-08-28">×</button></div>
-    </div>
-  </div>
 
   <div class="empty-state" id="empty-state">
     <strong>No routes tracked</strong>
@@ -846,6 +817,32 @@
       return null;
     }
     return value;
+  }
+
+  async function loadRoutes()
+  {
+    const response = await fetch("https://schedulesearch-v2-eqbfawfmdkdjbucq.centralindia-01.azurewebsites.net/api/http_get");
+    if (!response.ok) {
+    alert(await response.text());
+    return;}
+    const routes = await response.json();
+    board.querySelectorAll(".row:not(.head)").forEach(row => row.remove());
+    routes.forEach(route => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.dataset.pk = route.PartitionKey;
+      row.dataset.rk = route.RowKey;
+      row.innerHTML = `
+        <div class="dep">${route.DEP}</div>
+        <div class="arr">${route.ARR}</div>
+        <div class="date">${route.DATE}</div>
+        <div class="freq">${route.FREQ}</div>
+        <div class="route-arrow">→</div>
+        <div class="row-actions">
+            <button class="delete-btn">×</button>
+        </div>`;
+    board.appendChild(row)});
+    updateCount();
   }
 
   // ---------- Generic modal open/close ----------
@@ -917,20 +914,26 @@
   document.getElementById('delete-modal-close').addEventListener('click', closeDeleteModal);
   document.getElementById('delete-cancel-btn').addEventListener('click', closeDeleteModal);
 
-  document.getElementById('delete-confirm-btn').addEventListener('click', () => {
+  document.getElementById('delete-confirm-btn').addEventListener('click', async () => {
     const code = validateAccessCode(deleteAccessCodeInput);
     if (!code) return; // blocked — invalid state already shown on the input
     if (!pendingDeleteRow) return;
 
-    // TODO: fetch(`.../api/http_del?PartitionKey=${pendingDeleteRow.dataset.pk}&RowKey=${pendingDeleteRow.dataset.rk}`,
-    //   { method: 'DELETE', headers: { 'x-api-key': code } })
-    // remove the row from the DOM only after a success response.
-    pendingDeleteRow.remove();
-    updateCount();
+    const response = await fetch(`https://schedulesearch-v2-eqbfawfmdkdjbucq.centralindia-01.azurewebsites.net/api/http_del?PartitionKey=${pendingDeleteRow.dataset.pk}&RowKey=${pendingDeleteRow.dataset.rk}`,
+       { 
+          method: 'DELETE', 
+          headers: { 
+            'code': code } })
+    
+    if (!response.ok) {
+    alert(await response.text());
+    return;}
+
+    await loadRoutes();
     closeDeleteModal();
   });
 
-  addForm.addEventListener('submit', (e) => {
+  addForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const code = validateAccessCode(accessCodeInput);
@@ -957,32 +960,16 @@
       return;
     }
 
-    // TODO: fetch('.../api/http_post', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json', 'x-api-key': code },
-    //   body: JSON.stringify({ DEP: dep, ARR: arr, DATE: date })
-    // });
-    // http_post looks up the frequency live and returns it — use that
-    // real value (response.FREQ below is a stand-in) rather than a
-    // placeholder, and only proceed to the success modal once you get
-    // a 201 back.
-    const freq = '—'; // TODO: replace with FREQ from the POST response
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.dataset.pk = 'Route';
-    row.dataset.rk = `${dep}-${arr}-${date}`;
-    row.innerHTML = `
-      <div class="dep">${dep}</div>
-      <div class="arr">${arr}</div>
-      <div class="date">${date}</div>
-      <div class="freq">${freq}</div>
-      <div class="route-arrow">→</div>
-      <div class="row-actions"><button class="delete-btn" aria-label="Remove ${dep} to ${arr} on ${date}">×</button></div>
-    `;
-    board.appendChild(row);
-    updateCount();
-    addForm.reset();
+    const response = await fetch('https://schedulesearch-v2-eqbfawfmdkdjbucq.centralindia-01.azurewebsites.net/api/http_post', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json', 'code': code },
+           body: JSON.stringify({ DEP: dep, ARR: arr, DATE: date })});
+    if (!response.ok) {
+    alert(await response.text());
+    return;}
 
+    await loadRoutes();
+    addForm.reset();
     closeModal(addOverlay);
     showSuccess(dep, arr);
   });
@@ -1019,6 +1006,7 @@
   document.getElementById('success-done-btn').addEventListener('click', () => {
     closeModal(successOverlay);
   });
+  window.addEventListener('load', loadRoutes);
 </script>
 
 </body>

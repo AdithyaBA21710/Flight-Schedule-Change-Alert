@@ -26,7 +26,9 @@ def http_get(req: func.HttpRequest) -> func.HttpResponse:
 
     entities=table_client.list_entities()
     for entity in entities:
-        routelist.append({"DEP":entity["DEP"],
+        routelist.append({"PartitionKey": entity["PartitionKey"],
+                    "RowKey": entity["RowKey"],
+                    "DEP":entity["DEP"],
                     "ARR":entity["ARR"],
                     "FREQ":entity["FREQ"],
                     "DATE":entity["DATE"]})
