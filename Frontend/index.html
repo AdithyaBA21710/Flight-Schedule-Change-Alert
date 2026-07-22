@@ -401,7 +401,7 @@
     color: var(--amber);
     filter: drop-shadow(0 0 6px rgba(242, 169, 59, 0.55));
     offset-path: path("M10,66 C 90,4 230,4 320,34");
-    offset-rotate: auto;
+    offset-rotate: auto 90deg;
     opacity: 0;
   }
 
@@ -455,6 +455,59 @@
     letter-spacing: 0.1em;
     margin: 0 0 22px;
   }
+
+  /* ---------- Delete confirmation modal ---------- */
+  .delete-route-preview {
+    font-family: var(--mono);
+    text-align: center;
+    color: var(--text);
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    background: var(--tile);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .btn-cancel {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--hairline);
+    color: var(--text-dim);
+    border-radius: 4px;
+    padding: 11px 16px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .btn-cancel:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .btn-danger {
+    flex: 1;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 11px 16px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.15s ease;
+  }
+
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn-danger:active { transform: translateY(1px); }
 
   /* ---------- Board ---------- */
   .board-heading {
@@ -677,13 +730,32 @@
           <path d="M10,66 C 90,4 230,4 320,34" />
         </svg>
         <svg class="plane-icon" id="plane-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2 12 L22 3 L15 21 L11.5 13.5 L2 12 Z" />
+          <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l4-1 4 1v-1.5L13 19v-5.5l8 2.5z"/>
         </svg>
       </div>
       <div class="success-check" id="success-check">✓</div>
       <p class="success-title" id="success-modal-title">Route tracked</p>
       <p class="success-route" id="success-route-text">DEL → BOM</p>
       <button type="button" id="success-done-btn" class="modal-done-btn" style="width:100%">Done</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="delete-overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+      <div class="modal-title-row">
+        <span class="modal-title" id="delete-modal-title" style="color: var(--red)">REMOVE ROUTE</span>
+        <button type="button" class="modal-close" id="delete-modal-close" aria-label="Close">×</button>
+      </div>
+      <p class="modal-sub">Enter your access code to confirm removal.</p>
+      <div class="delete-route-preview" id="delete-route-preview">DEL → BOM · 2026-08-15</div>
+      <div class="access-code-field">
+        <label for="delete-access-code">Access code</label>
+        <input type="password" id="delete-access-code" placeholder="required to delete" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="delete-cancel-btn">Cancel</button>
+        <button type="button" class="btn-danger" id="delete-confirm-btn">Remove route</button>
+      </div>
     </div>
   </div>
 
@@ -763,14 +835,14 @@
   const accessCodeInput = document.getElementById('access-code');
 
   // Reads the code fresh at the moment of each request — nothing is
-  // stored beyond what's sitting in the input, and it's cleared the
-  // moment the page is reloaded or closed.
-  function getAccessCode() {
-    const value = accessCodeInput.value.trim();
+  // stored beyond what's sitting in the relevant input, and it's
+  // cleared the moment the page is reloaded or closed.
+  function validateAccessCode(input) {
+    const value = input.value.trim();
     if (!value) {
-      accessCodeInput.classList.add('invalid');
-      accessCodeInput.focus();
-      setTimeout(() => accessCodeInput.classList.remove('invalid'), 300);
+      input.classList.add('invalid');
+      input.focus();
+      setTimeout(() => input.classList.remove('invalid'), 300);
       return null;
     }
     return value;
@@ -817,25 +889,51 @@
     board.style.display = rows.length === 0 ? 'none' : 'block';
   }
 
+  // ---------- Delete confirmation modal ----------
+  const deleteOverlay = document.getElementById('delete-overlay');
+  const deleteAccessCodeInput = document.getElementById('delete-access-code');
+  const deleteRoutePreview = document.getElementById('delete-route-preview');
+  let pendingDeleteRow = null;
+
   board.addEventListener('click', (e) => {
     const btn = e.target.closest('.delete-btn');
     if (!btn) return;
 
-    const code = getAccessCode();
-    if (!code) return; // blocked — invalid state already shown on the input
+    pendingDeleteRow = btn.closest('.row');
+    const dep = pendingDeleteRow.querySelector('.dep').textContent;
+    const arr = pendingDeleteRow.querySelector('.arr').textContent;
+    const date = pendingDeleteRow.querySelector('.date').textContent;
+    deleteRoutePreview.textContent = `${dep} → ${arr} · ${date}`;
 
-    const row = btn.closest('.row');
-    // TODO: fetch(`.../api/http_del?PartitionKey=${row.dataset.pk}&RowKey=${row.dataset.rk}`,
+    deleteAccessCodeInput.value = '';
+    openModal(deleteOverlay, deleteAccessCodeInput);
+  });
+
+  function closeDeleteModal() {
+    closeModal(deleteOverlay);
+    pendingDeleteRow = null;
+  }
+
+  document.getElementById('delete-modal-close').addEventListener('click', closeDeleteModal);
+  document.getElementById('delete-cancel-btn').addEventListener('click', closeDeleteModal);
+
+  document.getElementById('delete-confirm-btn').addEventListener('click', () => {
+    const code = validateAccessCode(deleteAccessCodeInput);
+    if (!code) return; // blocked — invalid state already shown on the input
+    if (!pendingDeleteRow) return;
+
+    // TODO: fetch(`.../api/http_del?PartitionKey=${pendingDeleteRow.dataset.pk}&RowKey=${pendingDeleteRow.dataset.rk}`,
     //   { method: 'DELETE', headers: { 'x-api-key': code } })
     // remove the row from the DOM only after a success response.
-    row.remove();
+    pendingDeleteRow.remove();
     updateCount();
+    closeDeleteModal();
   });
 
   addForm.addEventListener('submit', (e) => {
     e.preventDefault();
 
-    const code = getAccessCode();
+    const code = validateAccessCode(accessCodeInput);
     if (!code) return; // blocked — invalid state already shown on the input
 
     const depInput = document.getElementById('dep');
@@ -902,9 +1000,11 @@
     openModal(successOverlay);
 
     // Restart the plane animation each time by removing and re-adding
-    // the class (a class that's already present won't re-trigger).
+    // the class. offsetWidth isn't reliably defined on SVG elements
+    // across browsers, so getBoundingClientRect() is used instead to
+    // force the reflow the browser needs to notice the class change.
     planeIcon.classList.remove('flying');
-    void planeIcon.offsetWidth; // force reflow so the browser notices
+    planeIcon.getBoundingClientRect();
     planeIcon.classList.add('flying');
 
     const revealCheck = () => successCheck.classList.add('show');
