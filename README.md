@@ -113,22 +113,3 @@ All endpoints live on the HTTP-triggered Function App. `POST` and `DELETE` requi
 6. **Create the Static Web App**, connect it to this repo with `frontend/` as the app location, and let it auto-deploy.
 7. Open the deployed site, enter your access code, and add your first route.
 
-## Frontend notes
-
-The dashboard (`frontend/index.html`) is a single self-contained file — no build step, no dependencies beyond Google Fonts. It expects the HTTP Function App's base URL to be set inside the file's `fetch()` calls. The access code is never persisted anywhere; it's read from the input field at the moment each request is made.
-
-## Known limitations
-
-- A shared access code is authentication-adjacent, not real multi-user auth — an intentional trade-off for a single-user tool, not an oversight.
-- Table Storage entities are schemaless; field-name and casing consistency across rows is enforced in application code rather than by the database.
-- Flight data availability and accuracy depend entirely on SerpAPI's Google Flights engine.
-
-## What I'd build next
-
-- Move the access code to proper per-user authentication if this ever supported more than one person
-- Add automated tests around the frequency-comparison and expiry logic, given how easy it was to introduce silent bugs there during development
-- Extract the duplicated SerpAPI-calling logic shared between the two Function Apps into a shared package, now that both are stable
-
-## License
-
-Add a license of your choice here (e.g. MIT) if you intend this repo to be public.
